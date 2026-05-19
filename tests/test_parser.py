@@ -45,6 +45,28 @@ def test_parse_price_empty():
     assert v is None and c is None
 
 
+def test_parse_price_picks_min_when_multiple_prices():
+    """A wrapper element often contains old price + current/sale price.
+    Sale price is always the smaller one."""
+    v, c = parse_price("1.899,99 ₼ 1.799,99 ₼ 0% 12 ay")
+    assert v == 1799.99
+    assert c == "AZN"
+
+
+def test_parse_price_ignores_unrelated_numbers():
+    """Numbers without an adjacent currency token (like '0%' or '12 ay') must
+    not be treated as prices."""
+    v, c = parse_price("Discount 0% installment 12 months, price 499,00 ₼")
+    assert v == 499.0
+    assert c == "AZN"
+
+
+def test_parse_price_currency_before_number():
+    v, c = parse_price("$25.99")
+    assert v == 25.99
+    assert c == "USD"
+
+
 def test_parse_listing_extracts_products_and_dedupes():
     html = FIXTURE.read_text(encoding="utf-8")
     products = parse_listing(html, "https://example.az", _listing())

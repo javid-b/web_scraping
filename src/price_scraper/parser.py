@@ -11,58 +11,89 @@ from .config import ListingConfig
 # Currency aliases seen on AZ retail sites. Order matters: longer first.
 _CURRENCY_TOKENS = [
     ("AZN", "AZN"),
-    ("MAN", "AZN"),
     ("MANAT", "AZN"),
-    ("₼", "AZN"),
+    ("MAN", "AZN"),
+    ("₼", "AZN"),       # ₼
     ("USD", "USD"),
     ("$", "USD"),
     ("EUR", "EUR"),
-    ("€", "EUR"),
+    ("€", "EUR"),       # €
     ("RUB", "RUB"),
-    ("₽", "RUB"),
+    ("₽", "RUB"),       # ₽
 ]
 
-_PRICE_NUMBER_RE = re.compile(r"[\d][\d  .,]*")
+# Class of chars that can appear inside a number token: ASCII digit, ASCII
+# space, NO-BREAK SPACE (U+00A0), NARROW NO-BREAK SPACE (U+202F), comma, dot.
+_NUM_CLASS = "[\\d   .,]"
+_PRICE_NUMBER_RE = re.compile(r"\d" + _NUM_CLASS + "*")
+
+# Match `<currency> <number>` or `<number> <currency>`. Word currencies use
+# word boundaries to avoid matching inside English words.
+_CURRENCY_RE = r"(?:\b(?:AZN|MANAT|MAN|USD|EUR|RUB)\b|[₼€₽$])"
+_PRICE_WITH_CURRENCY_RE = re.compile(
+    rf"(?:{_CURRENCY_RE}\s*(\d{_NUM_CLASS}*)|(\d{_NUM_CLASS}*)\s*{_CURRENCY_RE})",
+    re.IGNORECASE,
+)
+
+
+def _normalize_number(raw: str) -> float | None:
+    """Parse a number-string like '1 234,56' or '2199.50' into a float."""
+    s = raw.strip().replace(" ", " ").replace(" ", " ").replace(" ", "")
+    if not s:
+        return None
+    if "," in s and "." in s:
+        # Both present: the rightmost is the decimal separator.
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    elif "," in s:
+        # Comma is the decimal separator if it's followed by exactly 1-2 digits.
+        if re.search(r",\d{1,2}$", s):
+            s = s.replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _detect_currency(text: str) -> str | None:
+    upper = text.upper()
+    for token, code in _CURRENCY_TOKENS:
+        if token in upper or token in text:
+            return code
+    return None
 
 
 def parse_price(text: str) -> tuple[float | None, str | None]:
     """Pull a numeric price + currency out of arbitrary HTML text.
 
-    Handles AZN formats like '1 234,56 ₼', '1234.56 AZN', '1,299 AZN'.
-    Returns (None, None) if no number is found.
+    When the text contains multiple `number + currency` pairs (e.g. a
+    crossed-out original price next to a discounted current price), return
+    the SMALLEST price — sale prices are lower than originals. Returns
+    (None, None) if no number can be parsed.
     """
     if not text:
         return None, None
 
-    upper = text.upper()
-    currency: str | None = None
-    for token, code in _CURRENCY_TOKENS:
-        if token in upper or token in text:
-            currency = code
-            break
+    currency = _detect_currency(text)
 
+    candidates: list[float] = []
+    for m in _PRICE_WITH_CURRENCY_RE.finditer(text):
+        raw = m.group(1) or m.group(2) or ""
+        v = _normalize_number(raw)
+        if v is not None and v > 0:
+            candidates.append(v)
+    if candidates:
+        return min(candidates), currency
+
+    # Fallback when no currency token is present in the text.
     match = _PRICE_NUMBER_RE.search(text)
     if not match:
         return None, currency
-
-    raw = match.group(0).strip().replace(" ", " ").replace(" ", "")
-    # Decide decimal separator: if both '.' and ',' appear, the rightmost wins.
-    if "," in raw and "." in raw:
-        if raw.rfind(",") > raw.rfind("."):
-            raw = raw.replace(".", "").replace(",", ".")
-        else:
-            raw = raw.replace(",", "")
-    elif "," in raw:
-        # Comma as decimal if it's followed by 1-2 digits at end, else thousands sep.
-        if re.search(r",\d{1,2}$", raw):
-            raw = raw.replace(",", ".")
-        else:
-            raw = raw.replace(",", "")
-
-    try:
-        return float(raw), currency
-    except ValueError:
-        return None, currency
+    return _normalize_number(match.group(0)), currency
 
 
 @dataclass
