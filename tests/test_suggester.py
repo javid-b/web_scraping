@@ -118,6 +118,33 @@ def test_detect_pagination_returns_none_when_absent():
     assert detect_pagination("<html><body>nothing</body></html>") is None
 
 
+def test_detect_pagination_uses_visible_max_page_number():
+    """When numbered links go up to ?page=12, max_pages should be ~12, not 50."""
+    html = """
+    <html><body>
+      <div class="pg">
+        <a href="?page=1">1</a>
+        <a href="?page=2">2</a>
+        <a href="?page=3">3</a>
+        <a href="?page=12">12</a>
+        <a href="?page=2" rel="next">Next</a>
+      </div>
+    </body></html>
+    """
+    p = detect_pagination(html)
+    assert p is not None
+    # +2 buffer so we don't miss a page added between detect and scrape.
+    assert p.max_pages == 14
+    assert "last page = 12" in p.note
+
+
+def test_detect_pagination_falls_back_to_50_without_numbered_links():
+    html = '<html><body><a rel="next" href="/p/2">Next</a></body></html>'
+    p = detect_pagination(html)
+    assert p is not None
+    assert p.max_pages == 50
+
+
 def test_rendered_pagination_block_is_valid_yaml():
     """Selectors like a[rel="next"] contain double quotes — the renderer must
     not produce 'next_selector: "a[rel="next"]"' which would break YAML."""

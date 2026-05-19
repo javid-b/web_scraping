@@ -50,6 +50,7 @@ class PaginationSuggestion:
     param: str | None = None                 # query-param name (query mode)
     template: str | None = None              # path template (path mode)
     next_selector: str | None = None         # CSS selector (next_link mode)
+    max_pages: int = 50                      # safety cap; tightened if a real total is visible
     note: str = ""                           # one-line explanation
 
 
@@ -60,6 +61,24 @@ _LOAD_MORE_TEXTS = {
     "load more", "show more", "view more", "see more",
     "ещё", "загрузить ещё", "показать ещё",
 }
+
+
+_PAGE_NUM_RE = re.compile(r"[?&](?:page|pg)=(\d+)|/page/(\d+)", re.IGNORECASE)
+
+
+def _detect_max_page(soup: BeautifulSoup) -> int | None:
+    """Find the highest page number visible in pagination links.
+
+    Only counts anchors whose href looks like pagination (`?page=N` or
+    `/page/N/`), so unrelated numbers on the page (prices, etc.) are ignored.
+    """
+    nums: set[int] = set()
+    for a in soup.find_all("a", href=True):
+        for m in _PAGE_NUM_RE.finditer(a["href"]):
+            n = int(m.group(1) or m.group(2))
+            if 1 <= n <= 10_000:
+                nums.add(n)
+    return max(nums) if nums else None
 
 
 def detect_pagination(html: str) -> PaginationSuggestion | None:
@@ -73,6 +92,11 @@ def detect_pagination(html: str) -> PaginationSuggestion | None:
       5. Generic "next" anchor by text          → next_link
     """
     soup = BeautifulSoup(html, "lxml")
+    max_page = _detect_max_page(soup)
+    # Use the detected last-page number with a small buffer; cap at 50 if absent.
+    max_pages = (max_page + 2) if max_page else 50
+
+    page_count_note = f" (last page = {max_page})" if max_page else ""
 
     # 1. Explicit rel="next".
     rel_next = soup.find("a", attrs={"rel": re.compile(r"next", re.I)})
@@ -80,7 +104,8 @@ def detect_pagination(html: str) -> PaginationSuggestion | None:
         return PaginationSuggestion(
             mode="next_link",
             next_selector='a[rel="next"]',
-            note="found <a rel='next'>",
+            max_pages=max_pages,
+            note=f"found <a rel='next'>{page_count_note}",
         )
 
     # 2 & 3. Look at anchor hrefs for explicit page-number URLs.
@@ -89,9 +114,9 @@ def detect_pagination(html: str) -> PaginationSuggestion | None:
     for a in soup.find_all("a", href=True):
         href = a["href"]
         m_q = re.search(r"[?&](\w+)=(\d+)", href)
-        if m_q and m_q.group(1).lower() in {"page", "p", "pg"}:
+        if m_q and m_q.group(1).lower() in {"page", "pg"}:
             query_pages.add(m_q.group(1))
-        m_p = re.search(r"/(?:page|p)/(\d+)/?", href)
+        m_p = re.search(r"/page/(\d+)/?", href)
         if m_p:
             path_pages.add(href)
     if query_pages:
@@ -100,13 +125,15 @@ def detect_pagination(html: str) -> PaginationSuggestion | None:
         return PaginationSuggestion(
             mode="query",
             param=param,
-            note=f"found numbered links with ?{param}=N",
+            max_pages=max_pages,
+            note=f"found numbered links with ?{param}=N{page_count_note}",
         )
     if path_pages:
         return PaginationSuggestion(
             mode="path",
             template="/page/{n}",
-            note="found numbered /page/N/ links",
+            max_pages=max_pages,
+            note=f"found numbered /page/N/ links{page_count_note}",
         )
 
     # 4. Load-more / "Daha çox göstər" button.
@@ -123,7 +150,8 @@ def detect_pagination(html: str) -> PaginationSuggestion | None:
             return PaginationSuggestion(
                 mode="next_link",
                 next_selector=sel,
-                note=note,
+                max_pages=max_pages,
+                note=note + page_count_note,
             )
 
     # 5. Generic "next" link by visible text.
@@ -135,7 +163,8 @@ def detect_pagination(html: str) -> PaginationSuggestion | None:
             return PaginationSuggestion(
                 mode="next_link",
                 next_selector=sel,
-                note=f'found "next" link (text: {a.get_text(strip=True)!r})',
+                max_pages=max_pages,
+                note=f'found "next" link (text: {a.get_text(strip=True)!r}){page_count_note}',
             )
 
     return None
@@ -370,7 +399,7 @@ def _render_pagination(p: PaginationSuggestion | None) -> list[str]:
         lines.append(f"      template: {_yaml_quote(p.template)}")
     if p.next_selector:
         lines.append(f"      next_selector: {_yaml_quote(p.next_selector)}")
-    lines.append("      max_pages: 50")
+    lines.append(f"      max_pages: {p.max_pages}")
     return lines
 
 
