@@ -22,7 +22,9 @@ class PaginationConfig:
     param: str | None = None
     template: str | None = None
     next_selector: str | None = None
-    max_pages: int = 50
+    max_pages: int = 1000          # safety cap; the scraper stops naturally
+                                    # when a page returns 0 products or there
+                                    # is no next-link, so this is rarely hit
 
 
 @dataclass
@@ -93,7 +95,7 @@ def _pagination(raw: dict[str, Any] | None) -> PaginationConfig:
         param=raw.get("param"),
         template=raw.get("template"),
         next_selector=raw.get("next_selector"),
-        max_pages=int(raw.get("max_pages", 50)),
+        max_pages=int(raw.get("max_pages", 1000)),
     )
 
 

@@ -118,8 +118,8 @@ def test_detect_pagination_returns_none_when_absent():
     assert detect_pagination("<html><body>nothing</body></html>") is None
 
 
-def test_detect_pagination_uses_visible_max_page_number():
-    """When numbered links go up to ?page=12, max_pages should be ~12, not 50."""
+def test_detect_pagination_notes_visible_max_page_number():
+    """When numbered links go up to ?page=12, the detected note reports it."""
     html = """
     <html><body>
       <div class="pg">
@@ -133,16 +133,15 @@ def test_detect_pagination_uses_visible_max_page_number():
     """
     p = detect_pagination(html)
     assert p is not None
-    # +2 buffer so we don't miss a page added between detect and scrape.
-    assert p.max_pages == 14
     assert "last page = 12" in p.note
 
 
-def test_detect_pagination_falls_back_to_50_without_numbered_links():
+def test_rendered_pagination_does_not_force_max_pages():
+    """max_pages is a safety cap (default 1000) — the snippet should not nag
+    users to set it. The scraper stops naturally on empty / missing next."""
     html = '<html><body><a rel="next" href="/p/2">Next</a></body></html>'
-    p = detect_pagination(html)
-    assert p is not None
-    assert p.max_pages == 50
+    out = render_suggestions([], detect_pagination(html))
+    assert "max_pages" not in out
 
 
 def test_rendered_pagination_block_is_valid_yaml():

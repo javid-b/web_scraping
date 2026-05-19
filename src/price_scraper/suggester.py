@@ -389,7 +389,10 @@ def _render_pagination(p: PaginationSuggestion | None) -> list[str]:
         )
         return lines
     lines.append(f"Detected: {p.note}")
-    lines.append("Paste under this shop's `listing:` block in shops.yaml:")
+    lines.append(
+        "The scraper auto-stops when a page returns no products or the next-link\n"
+        "disappears — you don't need to set a page count. Paste under `listing:`:"
+    )
     lines.append("")
     lines.append("    pagination:")
     lines.append(f"      mode: {p.mode}")
@@ -399,7 +402,6 @@ def _render_pagination(p: PaginationSuggestion | None) -> list[str]:
         lines.append(f"      template: {_yaml_quote(p.template)}")
     if p.next_selector:
         lines.append(f"      next_selector: {_yaml_quote(p.next_selector)}")
-    lines.append(f"      max_pages: {p.max_pages}")
     return lines
 
 

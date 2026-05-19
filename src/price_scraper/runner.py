@@ -62,10 +62,19 @@ def scrape_shop(shop: ShopConfig, storage: Storage, scraped_at: str) -> ShopResu
         result.categories_visited += 1
         page = 1
         next_url: str | None = category_url
+        visited: set[str] = set()
         while next_url and page <= pag.max_pages:
             url = next_url if pag.mode == "next_link" else _page_url(
                 category_url, pag.mode, pag.param, pag.template, page
             )
+            if url in visited:
+                # Pagination linked back to a page we've already fetched —
+                # treat as end-of-list to avoid infinite loops on buggy sites.
+                log.info("[%s] %s: hit already-visited URL %s, stopping",
+                         shop.id, category_url, url)
+                break
+            visited.add(url)
+
             try:
                 html = fetcher.get(url)
             except FetchError as exc:
