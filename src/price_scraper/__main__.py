@@ -80,6 +80,43 @@ def cmd_suggest(args: argparse.Namespace) -> int:
     return 0 if suggestions else 1
 
 
+def cmd_fetch(args: argparse.Namespace) -> int:
+    """Download a URL with a shop's headers/engine and save the response body.
+
+    Useful for debugging when `suggest` finds nothing — open the saved HTML
+    in a browser to see whether product names are present, or share the file.
+    """
+    from pathlib import Path
+    from .config import RequestConfig
+    from .fetcher import Fetcher
+
+    cfg = load_config(args.config)
+    if args.shop:
+        by_id = {s.id: s for s in cfg.shops}
+        if args.shop not in by_id:
+            print(f"unknown shop id: {args.shop}", file=sys.stderr)
+            return 2
+        req_cfg = by_id[args.shop].request
+    else:
+        req_cfg = RequestConfig()
+
+    fetcher = Fetcher(req_cfg)
+    html = fetcher.get(args.url)
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(html, encoding="utf-8")
+
+    print(f"saved {len(html):,} bytes to {out_path}")
+    print(f"  contains 'AZN':       {html.count('AZN')}")
+    print(f"  contains '₼':         {html.count('₼')}")
+    print(f"  contains 'product':   {html.lower().count('product')}")
+    print(f"  contains 'price':     {html.lower().count('price')}")
+    print(f"  <div> count:          {html.lower().count('<div')}")
+    print(f"  <article> count:      {html.lower().count('<article')}")
+    print(f"  <script> count:       {html.lower().count('<script')}")
+    return 0
+
+
 def cmd_history(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     storage = Storage(cfg.storage.db_path)
@@ -128,6 +165,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sg.add_argument("--limit", type=int, default=3, help="how many candidate layouts to show")
     sg.set_defaults(func=cmd_suggest)
+
+    f = sub.add_parser(
+        "fetch",
+        help="download a URL with a shop's headers and save the HTML (for debugging)",
+    )
+    f.add_argument("url", help="URL to download")
+    f.add_argument("--shop", help="shop id whose headers/engine to use")
+    f.add_argument("--out", default="data/dump.html", help="path to save HTML (default data/dump.html)")
+    f.set_defaults(func=cmd_fetch)
 
     h = sub.add_parser("history", help="print price history of a product in one shop")
     h.add_argument("shop")
