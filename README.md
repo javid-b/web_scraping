@@ -80,18 +80,39 @@ because each retailer has its own URL layout. To wire up a shop:
 
 1. Open the site in your browser and copy a few category-page URLs.
 2. Paste them under that shop's `discovery.category_urls`.
-3. Right-click a product card → Inspect element to find the actual CSS classes
-   for the card, the name, and the price.
-4. Update `listing.product_selector`, `listing.name_selector`,
-   `listing.price_selector` for that shop.
-5. Dry-run the selectors against a single page:
+3. **Auto-detect selectors** for a category page:
+
+```bash
+price_scraper suggest --shop kontakt 'https://kontakt.az/<some-category>'
+```
+
+This fetches the page, finds the repeating product-card pattern (sibling
+elements sharing a class that contain a price), and prints a ready-to-paste
+YAML block, e.g.:
+
+```
+=== Layout 1 — 24 cards, 24 with valid price ===
+  listing:
+    product_selector: ".catalog-item"
+    name_selector:    ".catalog-item__title"
+    price_selector:   ".catalog-item__price"
+
+  Sample extraction:
+       2 899,00 ₼   Apple MacBook Air M2 13" 256GB
+       1 499,00 ₼   HP Pavilion 15-eg2034ci i5/16GB/512GB
+       ...
+```
+
+Paste the three selector lines into the shop's `listing:` block. If the
+top suggestion looks wrong, try Layout 2/3 (raise `--limit`).
+
+4. Dry-run the chosen selectors:
 
 ```bash
 price_scraper inspect kontakt 'https://kontakt.az/<some-category>'
 ```
 
-That command fetches the URL with the shop's configured headers/UA and prints
-what would be extracted — adjust until the price and name come out clean.
+Adjust until the price and name come out clean.
 
 ### Pagination modes
 

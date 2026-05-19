@@ -10,6 +10,7 @@ from .inspect_tool import inspect
 from .merger import merge
 from .runner import run_all
 from .storage import Storage
+from .suggester import render_suggestions, suggest_from_url
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -65,6 +66,20 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_suggest(args: argparse.Namespace) -> int:
+    cfg = load_config(args.config)
+    shop = None
+    if args.shop:
+        by_id = {s.id: s for s in cfg.shops}
+        if args.shop not in by_id:
+            print(f"unknown shop id: {args.shop}", file=sys.stderr)
+            return 2
+        shop = by_id[args.shop]
+    suggestions = suggest_from_url(shop, args.url, max_results=args.limit)
+    print(render_suggestions(suggestions))
+    return 0 if suggestions else 1
+
+
 def cmd_history(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     storage = Storage(cfg.storage.db_path)
@@ -101,6 +116,18 @@ def build_parser() -> argparse.ArgumentParser:
     i.add_argument("url", help="URL of a category page to test")
     i.add_argument("--limit", type=int, default=10)
     i.set_defaults(func=cmd_inspect)
+
+    sg = sub.add_parser(
+        "suggest",
+        help="auto-detect product/name/price selectors for a category URL",
+    )
+    sg.add_argument("url", help="URL of a category page to analyze")
+    sg.add_argument(
+        "--shop",
+        help="shop id whose UA/headers to use (otherwise default UA)",
+    )
+    sg.add_argument("--limit", type=int, default=3, help="how many candidate layouts to show")
+    sg.set_defaults(func=cmd_suggest)
 
     h = sub.add_parser("history", help="print price history of a product in one shop")
     h.add_argument("shop")
