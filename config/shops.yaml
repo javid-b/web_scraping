@@ -1,0 +1,193 @@
+# Library of online shops to scrape.
+#
+# Each shop is a config-driven adapter. Fill in CSS selectors that match the
+# real HTML — defaults below are *placeholders* based on common patterns. Open
+# a category page in your browser, right-click → Inspect, and copy the actual
+# class names of the product card / title / price elements.
+#
+# Run `python -m price_scraper inspect <shop_id> <url>` to fetch a page and
+# preview what the configured selectors would extract.
+#
+# Schema (per shop):
+#   id:              unique short identifier (used in DB rows)
+#   name:            human label
+#   base_url:        root URL, used to resolve relative links
+#   enabled:         set to false to skip without deleting the entry
+#   request:
+#     user_agent:    override the default UA
+#     delay_seconds: politeness delay between requests to this shop
+#     timeout:       request timeout in seconds
+#   discovery:
+#     mode:          how to find category URLs. One of:
+#                      static    - use category_urls list as-is
+#                      sitemap   - parse sitemap_url, keep URLs matching include patterns
+#                      menu      - fetch base_url, extract links via menu_selector
+#     category_urls: [list of URLs] (mode=static)
+#     sitemap_url:   URL to sitemap.xml (mode=sitemap)
+#     include:       [regex patterns] URL must match at least one (sitemap/menu mode)
+#     exclude:       [regex patterns] URLs matching any are dropped
+#     menu_selector: CSS selector for nav <a> tags (mode=menu)
+#   listing:
+#     product_selector:   CSS selector for one product card
+#     name_selector:      relative selector inside the card (defaults: card text)
+#     price_selector:     relative selector for the price element
+#     link_selector:      relative selector for the product anchor; href is used
+#     pagination:
+#       mode:             none | query | path | next_link
+#       param:            query-param name when mode=query (e.g. "page")
+#       template:         path template when mode=path (e.g. "/page/{n}")
+#       next_selector:    CSS selector for next-page anchor when mode=next_link
+#       max_pages:        safety cap (default 50)
+
+shops:
+  - id: bakuelectronics
+    name: Baku Electronics
+    base_url: https://www.bakuelectronics.az
+    enabled: true
+    request:
+      delay_seconds: 1.0
+      timeout: 20
+    discovery:
+      mode: static
+      category_urls: []   # TODO: paste category URLs here, e.g. https://www.bakuelectronics.az/category/noutbuklar
+    listing:
+      product_selector: ".product-card, .product-item"
+      name_selector: ".product-title, .product-name, h3 a"
+      price_selector: ".price, .product-price"
+      link_selector: "a"
+      pagination:
+        mode: query
+        param: page
+        max_pages: 30
+
+  - id: irshad
+    name: Irshad
+    base_url: https://irshad.az
+    enabled: true
+    request:
+      delay_seconds: 1.0
+      timeout: 20
+    discovery:
+      mode: static
+      category_urls: []
+    listing:
+      product_selector: ".product-card, .product-item"
+      name_selector: ".product-title, .product-name, h3 a"
+      price_selector: ".price, .product-price"
+      link_selector: "a"
+      pagination:
+        mode: query
+        param: page
+        max_pages: 30
+
+  - id: kontakt
+    name: Kontakt Home
+    base_url: https://kontakt.az
+    enabled: true
+    request:
+      delay_seconds: 1.0
+      timeout: 20
+    discovery:
+      mode: static
+      category_urls: []
+    listing:
+      product_selector: ".product-card, .product-item, article.product"
+      name_selector: ".product-title, .product-name, h3 a"
+      price_selector: ".price, .product-price"
+      link_selector: "a"
+      pagination:
+        mode: query
+        param: page
+        max_pages: 30
+
+  - id: mgstore
+    name: MG Store
+    base_url: https://mgstore.az
+    enabled: true
+    request:
+      delay_seconds: 1.0
+      timeout: 20
+    discovery:
+      mode: static
+      category_urls: []
+    listing:
+      product_selector: ".product-card, .product-item"
+      name_selector: ".product-title, .product-name, h3 a"
+      price_selector: ".price, .product-price"
+      link_selector: "a"
+      pagination:
+        mode: query
+        param: page
+        max_pages: 30
+
+  - id: elitoptimal
+    name: Elit Optimal
+    base_url: https://elitoptimal.az
+    enabled: true
+    request:
+      delay_seconds: 1.0
+      timeout: 20
+    discovery:
+      mode: static
+      category_urls: []
+    listing:
+      product_selector: ".product-card, .product-item"
+      name_selector: ".product-title, .product-name, h3 a"
+      price_selector: ".price, .product-price"
+      link_selector: "a"
+      pagination:
+        mode: query
+        param: page
+        max_pages: 30
+
+  - id: soliton
+    name: Soliton
+    base_url: https://www.soliton.az
+    enabled: true
+    request:
+      delay_seconds: 1.0
+      timeout: 20
+    discovery:
+      mode: static
+      category_urls: []
+    listing:
+      product_selector: ".product-card, .product-item"
+      name_selector: ".product-title, .product-name, h3 a"
+      price_selector: ".price, .product-price"
+      link_selector: "a"
+      pagination:
+        mode: query
+        param: page
+        max_pages: 30
+
+  - id: wt
+    name: World Telecom
+    base_url: https://w-t.az
+    enabled: true
+    request:
+      delay_seconds: 1.0
+      timeout: 20
+    discovery:
+      mode: static
+      category_urls: []
+    listing:
+      product_selector: ".product-card, .product-item"
+      name_selector: ".product-title, .product-name, h3 a"
+      price_selector: ".price, .product-price"
+      link_selector: "a"
+      pagination:
+        mode: query
+        param: page
+        max_pages: 30
+
+defaults:
+  request:
+    user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    delay_seconds: 1.0
+    timeout: 20
+    max_retries: 3
+  storage:
+    db_path: data/prices.db
+  merge:
+    fuzzy_threshold: 88   # rapidfuzz token_set_ratio cutoff (0-100)
+    min_name_length: 4

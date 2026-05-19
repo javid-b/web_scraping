@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "price_scraper"
+version = "0.1.0"
+description = "Daily multi-shop product price scraper with historical trends and cross-shop merge."
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "PyYAML>=6.0",
+    "rapidfuzz>=3.6",
+    "tenacity>=8.2",
+]
+
+[project.scripts]
+price_scraper = "price_scraper.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

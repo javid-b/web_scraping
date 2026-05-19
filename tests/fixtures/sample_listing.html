@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="az">
+<head><meta charset="utf-8"><title>Test category</title></head>
+<body>
+  <nav>
+    <a class="menu-link" href="/category/noutbuklar">Noutbuklar</a>
+    <a class="menu-link" href="/category/telefonlar">Telefonlar</a>
+    <a class="menu-link" href="https://external.example.com">External</a>
+  </nav>
+
+  <div class="grid">
+    <div class="product-card">
+      <a href="/product/iphone-15-128gb"><h3 class="product-title">Apple iPhone 15 128GB Black</h3></a>
+      <span class="price">2 499,00 ₼</span>
+    </div>
+
+    <div class="product-card">
+      <a href="/product/samsung-s24"><h3 class="product-title">Samsung Galaxy S24 256GB</h3></a>
+      <span class="price">2199.50 AZN</span>
+    </div>
+
+    <div class="product-card">
+      <a href="/product/xiaomi-redmi"><h3 class="product-title">Xiaomi Redmi Note 13 Pro</h3></a>
+      <span class="price">699 AZN</span>
+    </div>
+
+    <!-- duplicate, should be deduped -->
+    <div class="product-card">
+      <a href="/product/iphone-15-128gb"><h3 class="product-title">Apple iPhone 15 128GB Black</h3></a>
+      <span class="price">2 499,00 ₼</span>
+    </div>
+
+    <!-- no price; still keep the product -->
+    <div class="product-card">
+      <a href="/product/mystery"><h3 class="product-title">Mystery Item</h3></a>
+      <span class="price"></span>
+    </div>
+  </div>
+
+  <a class="next-page" href="/category/test?page=2">Next</a>
+</body>
+</html>
