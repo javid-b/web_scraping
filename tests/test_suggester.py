@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from price_scraper.suggester import render_suggestions, suggest
+from price_scraper.suggester import detect_pagination, render_suggestions, suggest
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -53,3 +53,74 @@ def test_render_suggestions_includes_yaml_keys():
 def test_render_empty_suggestions_gives_guidance():
     out = render_suggestions([])
     assert "JavaScript" in out or "no" in out.lower()
+
+
+def test_detect_pagination_rel_next():
+    html = '<html><body><a rel="next" href="/p/2">Next</a></body></html>'
+    p = detect_pagination(html)
+    assert p is not None and p.mode == "next_link"
+    assert p.next_selector == 'a[rel="next"]'
+
+
+def test_detect_pagination_query_param():
+    html = """
+    <html><body>
+      <div class="pg">
+        <a href="?page=1">1</a>
+        <a href="?page=2">2</a>
+        <a href="?page=3">3</a>
+      </div>
+    </body></html>
+    """
+    p = detect_pagination(html)
+    assert p is not None and p.mode == "query"
+    assert p.param == "page"
+
+
+def test_detect_pagination_path():
+    html = """
+    <html><body>
+      <a href="/category/laptops/page/2/">2</a>
+      <a href="/category/laptops/page/3/">3</a>
+    </body></html>
+    """
+    p = detect_pagination(html)
+    assert p is not None and p.mode == "path"
+    assert p.template == "/page/{n}"
+
+
+def test_detect_pagination_load_more_button():
+    html = """
+    <html><body>
+      <button class="load-more-btn" data-href="/products?page=2">
+        Daha çox göstər
+      </button>
+    </body></html>
+    """
+    p = detect_pagination(html)
+    assert p is not None and p.mode == "next_link"
+    assert p.next_selector == ".load-more-btn"
+    assert "daha" in p.note.lower() or "load" in p.note.lower()
+
+
+def test_detect_pagination_load_more_button_without_href_warns():
+    html = """
+    <html><body>
+      <button class="js-only-btn">Daha çox göstər</button>
+    </body></html>
+    """
+    p = detect_pagination(html)
+    assert p is not None
+    assert "playwright" in p.note.lower()
+
+
+def test_detect_pagination_returns_none_when_absent():
+    assert detect_pagination("<html><body>nothing</body></html>") is None
+
+
+def test_find_next_page_reads_data_href():
+    from price_scraper.parser import find_next_page
+
+    html = '<html><body><button class="lm" data-href="/?page=2">More</button></body></html>'
+    url = find_next_page(html, "https://example.az", ".lm")
+    assert url == "https://example.az/?page=2"

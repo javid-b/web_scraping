@@ -152,7 +152,15 @@ def find_next_page(html: str, base_url: str, selector: str | None) -> str | None
     el = soup.select_one(selector)
     if not isinstance(el, Tag):
         return None
-    href = el.get("href")
-    if not href:
+    # "Load more" buttons often stash the next-page URL in a data-* attribute
+    # because the click is handled in JavaScript rather than the anchor's href.
+    href = (
+        el.get("href")
+        or el.get("data-href")
+        or el.get("data-url")
+        or el.get("data-next-page")
+        or el.get("data-next")
+    )
+    if not href or href in ("#", "javascript:void(0)"):
         return None
     return urljoin(base_url, href)

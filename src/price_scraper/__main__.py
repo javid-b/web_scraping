@@ -75,8 +75,8 @@ def cmd_suggest(args: argparse.Namespace) -> int:
             print(f"unknown shop id: {args.shop}", file=sys.stderr)
             return 2
         shop = by_id[args.shop]
-    suggestions = suggest_from_url(shop, args.url, max_results=args.limit)
-    print(render_suggestions(suggestions))
+    suggestions, pagination = suggest_from_url(shop, args.url, max_results=args.limit)
+    print(render_suggestions(suggestions, pagination))
     return 0 if suggestions else 1
 
 

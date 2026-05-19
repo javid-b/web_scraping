@@ -44,6 +44,103 @@ class Suggestion:
     samples: list[tuple[str, str]] = field(default_factory=list)  # (name, price text)
 
 
+@dataclass
+class PaginationSuggestion:
+    mode: str                                # query | path | next_link
+    param: str | None = None                 # query-param name (query mode)
+    template: str | None = None              # path template (path mode)
+    next_selector: str | None = None         # CSS selector (next_link mode)
+    note: str = ""                           # one-line explanation
+
+
+# Text labels that mean "go to next page" or "load more". Lowercase.
+_NEXT_TEXTS = {"next", "next page", "next »", "next ›", "›", "→", "»", "növbəti", "следующая"}
+_LOAD_MORE_TEXTS = {
+    "daha çox göstər", "daha çox", "daha cox gostar", "daha cox",
+    "load more", "show more", "view more", "see more",
+    "ещё", "загрузить ещё", "показать ещё",
+}
+
+
+def detect_pagination(html: str) -> PaginationSuggestion | None:
+    """Inspect a category page and suggest how to follow its pagination.
+
+    Tries, in priority order:
+      1. <a rel="next">       → next_link mode
+      2. ?page=N or &page=N   → query mode
+      3. /page/N/             → path mode
+      4. "Daha çox göstər" / "Load more" button → next_link with data-href
+      5. Generic "next" anchor by text          → next_link
+    """
+    soup = BeautifulSoup(html, "lxml")
+
+    # 1. Explicit rel="next".
+    rel_next = soup.find("a", attrs={"rel": re.compile(r"next", re.I)})
+    if isinstance(rel_next, Tag):
+        return PaginationSuggestion(
+            mode="next_link",
+            next_selector='a[rel="next"]',
+            note="found <a rel='next'>",
+        )
+
+    # 2 & 3. Look at anchor hrefs for explicit page-number URLs.
+    query_pages: set[str] = set()
+    path_pages: set[str] = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        m_q = re.search(r"[?&](\w+)=(\d+)", href)
+        if m_q and m_q.group(1).lower() in {"page", "p", "pg"}:
+            query_pages.add(m_q.group(1))
+        m_p = re.search(r"/(?:page|p)/(\d+)/?", href)
+        if m_p:
+            path_pages.add(href)
+    if query_pages:
+        # If multiple, prefer the most common name.
+        param = sorted(query_pages)[0]
+        return PaginationSuggestion(
+            mode="query",
+            param=param,
+            note=f"found numbered links with ?{param}=N",
+        )
+    if path_pages:
+        return PaginationSuggestion(
+            mode="path",
+            template="/page/{n}",
+            note="found numbered /page/N/ links",
+        )
+
+    # 4. Load-more / "Daha çox göstər" button.
+    for el in soup.find_all(["a", "button"]):
+        text = el.get_text(" ", strip=True).lower()
+        if not text:
+            continue
+        if any(t in text for t in _LOAD_MORE_TEXTS):
+            classes = el.get("class") or []
+            sel = f".{classes[0]}" if classes else el.name
+            note = f'found "load more" button (text: {el.get_text(strip=True)!r})'
+            if not (el.get("href") or any(el.get(a) for a in ("data-href", "data-url", "data-next-page", "data-next"))):
+                note += " — but it has no href / data-href, so JS handles the click; you'll need Playwright"
+            return PaginationSuggestion(
+                mode="next_link",
+                next_selector=sel,
+                note=note,
+            )
+
+    # 5. Generic "next" link by visible text.
+    for a in soup.find_all("a"):
+        text = a.get_text(" ", strip=True).lower()
+        if text in _NEXT_TEXTS:
+            classes = a.get("class") or []
+            sel = f".{classes[0]}" if classes else 'a[rel="next"]'
+            return PaginationSuggestion(
+                mode="next_link",
+                next_selector=sel,
+                note=f'found "next" link (text: {a.get_text(strip=True)!r})',
+            )
+
+    return None
+
+
 def _classes_of(el: Tag) -> list[str]:
     return list(el.get("class") or [])
 
@@ -228,20 +325,49 @@ def suggest(html: str, max_results: int = 3) -> list[Suggestion]:
 
 def suggest_from_url(
     shop: ShopConfig | None, url: str, max_results: int = 3
-) -> list[Suggestion]:
+) -> tuple[list[Suggestion], PaginationSuggestion | None]:
     fetcher = Fetcher(shop.request if shop else RequestConfig())
     html = fetcher.get(url)
-    return suggest(html, max_results=max_results)
+    return suggest(html, max_results=max_results), detect_pagination(html)
 
 
-def render_suggestions(suggestions: list[Suggestion]) -> str:
+def _render_pagination(p: PaginationSuggestion | None) -> list[str]:
+    lines: list[str] = ["", "=== Pagination ==="]
+    if p is None:
+        lines.append(
+            "Could not auto-detect pagination on this page. Two options:\n"
+            "  * leave the default `mode: query, param: page` — the scraper will\n"
+            "    walk ?page=2, ?page=3, ... and stop on the first empty page.\n"
+            "  * open page 2 in your browser and look at the URL to confirm."
+        )
+        return lines
+    lines.append(f"Detected: {p.note}")
+    lines.append("Paste under this shop's `listing:` block in shops.yaml:")
+    lines.append("")
+    lines.append("    pagination:")
+    lines.append(f'      mode: {p.mode}')
+    if p.param:
+        lines.append(f'      param: "{p.param}"')
+    if p.template:
+        lines.append(f'      template: "{p.template}"')
+    if p.next_selector:
+        lines.append(f'      next_selector: "{p.next_selector}"')
+    lines.append(f'      max_pages: 50')
+    return lines
+
+
+def render_suggestions(
+    suggestions: list[Suggestion],
+    pagination: PaginationSuggestion | None = None,
+) -> str:
     if not suggestions:
-        return (
+        out = (
             "No product layouts detected. Either the page is JavaScript-rendered "
             "(check 'View Source' — if you don't see product names there, the\n"
             "scraper won't either and you need Playwright), or product cards on this\n"
             "page don't contain price text (price might load over AJAX)."
         )
+        return out + "\n" + "\n".join(_render_pagination(pagination))
 
     lines: list[str] = []
     for i, s in enumerate(suggestions, 1):
@@ -260,4 +386,5 @@ def render_suggestions(suggestions: list[Suggestion]) -> str:
         lines.append("  Sample extraction:")
         for name, price in s.samples:
             lines.append(f"    {price:>20}   {name}")
+    lines.extend(_render_pagination(pagination))
     return "\n".join(lines)
