@@ -37,7 +37,9 @@ _NOISE_PATHS = re.compile(
 )
 
 _CONTAINER_TAGS = {"nav", "ul", "ol"}
-_MENU_CLASS_HINT = re.compile(r"\b(menu|nav(?!igation-link)|catalog|categor)", re.I)
+# Match menu-related substrings anywhere in a class name — no word boundary,
+# so camelCase like `contentMenu`, `mainMenu`, `MegaCatalogNav` all match.
+_MENU_CLASS_HINT = re.compile(r"(menu|nav|catalog|categor|drawer|dropdown)", re.I)
 _FOOTER_TAGS = {"footer"}
 _BAD_CLASS = re.compile(r"\b(footer|social|lang|currency|share)", re.I)
 
@@ -69,30 +71,52 @@ def _is_plausible_category_url(url: str, base_netloc: str) -> bool:
     return True
 
 
-def _container_selector(container: Tag) -> str:
-    """Build a stable CSS selector for the menu container."""
+def _common_anchor_class(anchors: list[Tag]) -> str | None:
+    """If every anchor in the group shares a class, return the longest one.
+
+    On sites like kontakt where all subcategory links use the same class
+    (`contentMenu__title`), this lets the suggested selector be precise
+    (`a.contentMenu__title[href]`) without depending on the container.
+    """
+    if not anchors:
+        return None
+    common: set[str] | None = None
+    for a in anchors:
+        classes = set(a.get("class") or [])
+        common = classes if common is None else common & classes
+        if not common:
+            return None
+    return max(common, key=len) if common else None
+
+
+def _build_selector(anchors: list[Tag], container: Tag) -> str:
+    """Prefer a precise anchor selector when all links share a class."""
+    shared = _common_anchor_class(anchors)
+    if shared:
+        return f"a.{shared}[href]"
     classes = [c for c in (container.get("class") or []) if not _BAD_CLASS.search(c)]
     tag = container.name
     if classes:
-        # Use the longest / most specific class.
         cls = max(classes, key=len)
         return f"{tag}.{cls} a[href]"
     return f"{tag} a[href]"
 
 
-def _find_stable_parent(a: Tag) -> Tag | None:
-    """Walk up the DOM until we hit a recognisable menu container."""
-    cur: Tag | None = a
-    for _ in range(8):
-        cur = cur.parent if cur else None
-        if not isinstance(cur, Tag):
-            return None
+def _menu_ancestors(a: Tag, max_levels: int = 8) -> list[Tag]:
+    """All menu-like ancestors of `a` (innermost first), up to max_levels."""
+    out: list[Tag] = []
+    cur: Tag | None = a.parent if isinstance(a.parent, Tag) else None
+    levels = 0
+    while isinstance(cur, Tag) and levels < max_levels:
         if cur.name in _CONTAINER_TAGS:
-            return cur
-        classes = cur.get("class") or []
-        if any(_MENU_CLASS_HINT.search(c) for c in classes):
-            return cur
-    return None
+            out.append(cur)
+        else:
+            classes = cur.get("class") or []
+            if any(_MENU_CLASS_HINT.search(c) for c in classes):
+                out.append(cur)
+        cur = cur.parent
+        levels += 1
+    return out
 
 
 def find_menus(html: str, base_url: str, max_results: int = 3) -> list[MenuSuggestion]:
@@ -113,24 +137,32 @@ def find_menus(html: str, base_url: str, max_results: int = 3) -> list[MenuSugge
             continue
         plausible.append((a, full, text))
 
-    # 2. Group anchors by their menu-like ancestor.
-    groups: dict[int, list[tuple[str, str]]] = defaultdict(list)
-    containers: dict[int, Tag] = {}
+    # 2. Group anchors by (tag, class signature) of EVERY menu-like ancestor in
+    # their chain. The same anchor contributes to multiple groups, one per
+    # ancestor — that way `<a>` deep inside a wrapper-per-item layout (kontakt:
+    # .contentMenu__item one-per-anchor → .contentMenu shared by all) gets
+    # grouped both ways and we can rank.
+    Signature = tuple[str, tuple[str, ...]]  # (tag, sorted classes)
+    groups: dict[Signature, list[tuple[Tag, str]]] = defaultdict(list)
+    representatives: dict[Signature, Tag] = {}
     for a, url, text in plausible:
-        parent = _find_stable_parent(a)
-        if parent is None:
-            continue
-        cid = id(parent)
-        groups[cid].append((url, text))
-        containers[cid] = parent
+        seen: set[Signature] = set()
+        for anc in _menu_ancestors(a):
+            sig = (anc.name, tuple(sorted(anc.get("class") or [])))
+            if sig in seen:
+                continue
+            seen.add(sig)
+            groups[sig].append((a, url))
+            representatives.setdefault(sig, anc)
 
     # 3. Score each group.
-    scored: list[tuple[float, Tag, list[str]]] = []
-    for cid, items in groups.items():
-        urls = list(dict.fromkeys(url for url, _ in items))  # de-dupe, keep order
+    scored: list[tuple[float, Tag, list[Tag], list[str]]] = []
+    for sig, items in groups.items():
+        anchors = [a for a, _ in items]
+        urls = list(dict.fromkeys(url for _, url in items))
         if len(urls) < 3:
             continue
-        container = containers[cid]
+        container = representatives[sig]
         score = float(len(urls))
         if container.name == "nav":
             score += 5
@@ -141,28 +173,31 @@ def find_menus(html: str, base_url: str, max_results: int = 3) -> list[MenuSugge
             score -= 5
         if container.find_parent(_FOOTER_TAGS):
             score -= 10
-        # Bonus when most URLs share a common path prefix (e.g. /category/X).
+        # Bonus when every anchor shares a class — that's a precise, cohesive menu.
+        if _common_anchor_class(anchors):
+            score += 5
+        # Bonus when URLs share a common path prefix (e.g. /category/X).
         prefixes = {urlparse(u).path.split("/", 2)[1] for u in urls if "/" in urlparse(u).path[1:]}
         if len(prefixes) == 1:
             score += 3
-        scored.append((score, container, urls))
+        scored.append((score, container, anchors, urls))
 
     scored.sort(key=lambda x: -x[0])
 
     out: list[MenuSuggestion] = []
     seen_url_sets: list[set[str]] = []
-    for score, container, urls in scored:
+    for score, container, anchors, urls in scored:
         url_set = set(urls)
-        # Drop suggestions that are a subset of a higher-ranked one.
+        # Skip if a higher-ranked candidate already covered these URLs.
         if any(url_set <= existing for existing in seen_url_sets):
             continue
         seen_url_sets.append(url_set)
 
-        classes = [c for c in (container.get("class") or [])]
+        classes = list(container.get("class") or [])
         note = f"<{container.name}>" + (f" .{classes[0]}" if classes else "")
         out.append(
             MenuSuggestion(
-                selector=_container_selector(container),
+                selector=_build_selector(anchors, container),
                 urls=urls,
                 note=note,
                 container_tag=container.name,

@@ -77,3 +77,63 @@ def test_render_menu_suggestions_includes_both_static_and_dynamic_forms():
 def test_render_menu_suggestions_handles_empty():
     out = render_menu_suggestions([])
     assert "No navigation menu" in out
+
+
+def test_find_menus_kontakt_style_megamenu():
+    """Mega menus that put each subcategory in its own `.contentMenu__item`
+    wrapper (per-anchor parent) used to break grouping. Group should still
+    pick up all subcategory links because they share an outer `.contentMenu`
+    ancestor."""
+    html = (FIXTURES / "megamenu_kontakt_style.html").read_text(encoding="utf-8")
+    suggestions = find_menus(html, "https://example.az")
+
+    assert suggestions, "expected at least one suggestion"
+    # The 5 subcategory anchors should all appear together in some suggestion.
+    expected = {
+        "https://example.az/telefoniya/smartfonlar",
+        "https://example.az/telefoniya/klassik",
+        "https://example.az/telefoniya/aksesuar",
+        "https://example.az/telefoniya/smart-saat",
+        "https://example.az/telefoniya/quluqcuq",
+    }
+    sub_sugs = [s for s in suggestions if expected <= set(s.urls)]
+    assert sub_sugs, (
+        "no candidate contains all 5 subcategory links; suggestions were: "
+        f"{[s.urls for s in suggestions]}"
+    )
+
+
+def test_find_menus_prefers_shared_anchor_class_selector():
+    """When every anchor in the menu shares a class (kontakt:
+    contentMenu__title), the suggested selector should target the anchors
+    directly rather than the container."""
+    html = (FIXTURES / "megamenu_kontakt_style.html").read_text(encoding="utf-8")
+    suggestions = find_menus(html, "https://example.az")
+    sub_sugs = [s for s in suggestions if any("smartfonlar" in u for u in s.urls)]
+    assert sub_sugs
+    # At least one should use the precise anchor-class selector.
+    assert any(s.selector == "a.contentMenu__title[href]" for s in sub_sugs), (
+        f"no suggestion used a.contentMenu__title[href]; got "
+        f"{[s.selector for s in sub_sugs]}"
+    )
+
+
+def test_find_menus_matches_camelcase_class():
+    """`contentMenu` should match the menu-class heuristic even though the
+    word 'menu' starts mid-string without a word boundary."""
+    html = """
+    <html><body>
+      <div class="someContentMenu">
+        <a href="/alpha">Alpha</a>
+        <a href="/beta">Beta</a>
+        <a href="/gamma">Gamma</a>
+        <a href="/delta">Delta</a>
+      </div>
+    </body></html>
+    """
+    suggestions = find_menus(html, "https://example.az")
+    assert suggestions
+    assert {u for u in suggestions[0].urls} == {
+        "https://example.az/alpha", "https://example.az/beta",
+        "https://example.az/gamma", "https://example.az/delta",
+    }
