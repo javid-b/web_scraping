@@ -331,6 +331,24 @@ def suggest_from_url(
     return suggest(html, max_results=max_results), detect_pagination(html)
 
 
+def _yaml_quote(s: str) -> str:
+    """Quote a string for YAML, picking the quote style that avoids nesting.
+
+    YAML single-quoted strings can't contain single quotes, double-quoted can't
+    contain unescaped doubles. CSS selectors like `a[rel="next"]` already
+    contain double quotes, so wrap those in single quotes.
+    """
+    if '"' in s and "'" not in s:
+        return f"'{s}'"
+    if "'" in s and '"' not in s:
+        return f'"{s}"'
+    # Both present (rare): escape inside double quotes.
+    if '"' in s and "'" in s:
+        escaped = s.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return f'"{s}"'
+
+
 def _render_pagination(p: PaginationSuggestion | None) -> list[str]:
     lines: list[str] = ["", "=== Pagination ==="]
     if p is None:
@@ -345,14 +363,14 @@ def _render_pagination(p: PaginationSuggestion | None) -> list[str]:
     lines.append("Paste under this shop's `listing:` block in shops.yaml:")
     lines.append("")
     lines.append("    pagination:")
-    lines.append(f'      mode: {p.mode}')
+    lines.append(f"      mode: {p.mode}")
     if p.param:
-        lines.append(f'      param: "{p.param}"')
+        lines.append(f"      param: {_yaml_quote(p.param)}")
     if p.template:
-        lines.append(f'      template: "{p.template}"')
+        lines.append(f"      template: {_yaml_quote(p.template)}")
     if p.next_selector:
-        lines.append(f'      next_selector: "{p.next_selector}"')
-    lines.append(f'      max_pages: 50')
+        lines.append(f"      next_selector: {_yaml_quote(p.next_selector)}")
+    lines.append("      max_pages: 50")
     return lines
 
 
@@ -378,10 +396,10 @@ def render_suggestions(
         lines.append("Paste under this shop's `listing:` block in shops.yaml:")
         lines.append("")
         lines.append("  listing:")
-        lines.append(f'    product_selector: "{s.product_selector}"')
+        lines.append(f"    product_selector: {_yaml_quote(s.product_selector)}")
         if s.name_selector:
-            lines.append(f'    name_selector:    "{s.name_selector}"')
-        lines.append(f'    price_selector:   "{s.price_selector}"')
+            lines.append(f"    name_selector:    {_yaml_quote(s.name_selector)}")
+        lines.append(f"    price_selector:   {_yaml_quote(s.price_selector)}")
         lines.append("")
         lines.append("  Sample extraction:")
         for name, price in s.samples:

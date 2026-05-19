@@ -118,6 +118,32 @@ def test_detect_pagination_returns_none_when_absent():
     assert detect_pagination("<html><body>nothing</body></html>") is None
 
 
+def test_rendered_pagination_block_is_valid_yaml():
+    """Selectors like a[rel="next"] contain double quotes — the renderer must
+    not produce 'next_selector: "a[rel="next"]"' which would break YAML."""
+    import yaml
+
+    html = '<html><body><a rel="next" href="/p/2">Next</a></body></html>'
+    out = render_suggestions([], detect_pagination(html))
+
+    # Pull out the pagination block lines and dedent them under a fake parent.
+    block_lines: list[str] = []
+    collecting = False
+    for raw in out.splitlines():
+        if raw.strip() == "pagination:":
+            collecting = True
+            block_lines.append("pagination:")
+            continue
+        if collecting:
+            if not raw.strip():
+                break
+            block_lines.append(raw[len("    "):] if raw.startswith("    ") else raw)
+    block_text = "\n".join(block_lines)
+    parsed = yaml.safe_load(block_text)
+    assert parsed["pagination"]["mode"] == "next_link"
+    assert parsed["pagination"]["next_selector"] == 'a[rel="next"]'
+
+
 def test_find_next_page_reads_data_href():
     from price_scraper.parser import find_next_page
 
