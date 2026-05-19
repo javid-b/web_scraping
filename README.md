@@ -51,7 +51,7 @@ Two CLIs:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"   # add [dev] if you want pytest too
 ```
 
 ## Daily workflow

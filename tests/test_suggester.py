@@ -7,7 +7,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_suggest_picks_catalog_item_layout():
-    html = (FIXTURES / "realistic_listing.html").read_text()
+    html = (FIXTURES / "realistic_listing.html").read_text(encoding="utf-8")
     suggestions = suggest(html, max_results=3)
 
     assert suggestions, "expected at least one suggestion"
@@ -29,7 +29,7 @@ def test_suggest_prefers_current_price_over_old_price():
     """The card has both .catalog-item__price-old and .catalog-item__price.
     We should pick the one matching for all 6 cards, not the one matching just 1.
     """
-    html = (FIXTURES / "realistic_listing.html").read_text()
+    html = (FIXTURES / "realistic_listing.html").read_text(encoding="utf-8")
     top = suggest(html, max_results=1)[0]
     assert top.price_selector == ".catalog-item__price"
     # __price-old only appears once and would score 1, not 6.
@@ -41,7 +41,7 @@ def test_suggest_returns_empty_for_html_without_products():
 
 
 def test_render_suggestions_includes_yaml_keys():
-    html = (FIXTURES / "realistic_listing.html").read_text()
+    html = (FIXTURES / "realistic_listing.html").read_text(encoding="utf-8")
     out = render_suggestions(suggest(html, max_results=1))
     assert "product_selector" in out
     assert "price_selector" in out

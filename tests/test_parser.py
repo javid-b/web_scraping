@@ -46,7 +46,7 @@ def test_parse_price_empty():
 
 
 def test_parse_listing_extracts_products_and_dedupes():
-    html = FIXTURE.read_text()
+    html = FIXTURE.read_text(encoding="utf-8")
     products = parse_listing(html, "https://example.az", _listing())
     names = [p.name for p in products]
     assert "Apple iPhone 15 128GB Black" in names
@@ -63,7 +63,7 @@ def test_parse_listing_extracts_products_and_dedupes():
 
 
 def test_find_next_page_resolves_relative_link():
-    html = FIXTURE.read_text()
+    html = FIXTURE.read_text(encoding="utf-8")
     url = find_next_page(html, "https://example.az", ".next-page")
     assert url == "https://example.az/category/test?page=2"
 

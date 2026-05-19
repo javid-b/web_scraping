@@ -16,6 +16,9 @@ dependencies = [
     "tenacity>=8.2",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [project.scripts]
 price_scraper = "price_scraper.__main__:main"
 
