@@ -90,7 +90,8 @@ def _candidate_inner_selectors(
     cards: list[Tag], predicate: Callable[[Tag], bool]
 ) -> list[str]:
     """Collect class- and tag-based selectors from the first few cards where
-    `predicate(el)` holds."""
+    `predicate(el)` holds. Sorted so iteration order is deterministic across
+    platforms (set iteration order can differ on Windows vs Linux)."""
     selectors: set[str] = set()
     for sample in cards[:3]:
         for el in sample.find_all(True):
@@ -100,7 +101,7 @@ def _candidate_inner_selectors(
                 selectors.add(f".{c}")
             if el.name in {"h1", "h2", "h3", "h4"}:
                 selectors.add(el.name)
-    return list(selectors)
+    return sorted(selectors)
 
 
 def _score_selector(

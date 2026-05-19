@@ -14,7 +14,9 @@ def test_suggest_picks_catalog_item_layout():
     top = suggestions[0]
     assert top.product_selector == ".catalog-item"
     assert top.price_selector == ".catalog-item__price"
-    assert top.name_selector in (".catalog-item__title", "h3")
+    # Any of these is equivalent: the <a class="catalog-item__link"> wraps the
+    # <h3 class="catalog-item__title">, so all three yield the same text.
+    assert top.name_selector in (".catalog-item__title", ".catalog-item__link", "h3")
     assert top.product_count == 6
     assert top.price_match_count == 6
 
