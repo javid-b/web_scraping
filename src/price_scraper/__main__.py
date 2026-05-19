@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .config import load_config
 from .inspect_tool import inspect
+from .menu_finder import find_menus, render_menu_suggestions
 from .merger import merge
 from .runner import run_all
 from .storage import Storage
@@ -77,6 +78,25 @@ def cmd_suggest(args: argparse.Namespace) -> int:
         shop = by_id[args.shop]
     suggestions, pagination = suggest_from_url(shop, args.url, max_results=args.limit)
     print(render_suggestions(suggestions, pagination))
+    return 0 if suggestions else 1
+
+
+def cmd_suggest_menu(args: argparse.Namespace) -> int:
+    """Crawl the shop's homepage and suggest category URLs to scrape."""
+    from .config import RequestConfig
+    from .fetcher import Fetcher
+
+    cfg = load_config(args.config)
+    by_id = {s.id: s for s in cfg.shops}
+    if args.shop not in by_id:
+        print(f"unknown shop id: {args.shop}", file=sys.stderr)
+        return 2
+    shop = by_id[args.shop]
+    url = args.url or shop.base_url
+    fetcher = Fetcher(shop.request)
+    html = fetcher.get(url)
+    suggestions = find_menus(html, shop.base_url, max_results=args.limit)
+    print(render_menu_suggestions(suggestions))
     return 0 if suggestions else 1
 
 
@@ -165,6 +185,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sg.add_argument("--limit", type=int, default=3, help="how many candidate layouts to show")
     sg.set_defaults(func=cmd_suggest)
+
+    sm = sub.add_parser(
+        "suggest-menu",
+        help="discover category URLs from a shop's homepage menu",
+    )
+    sm.add_argument("shop", help="shop id (uses its base_url unless --url is given)")
+    sm.add_argument("--url", help="override the page to analyze (default: shop's base_url)")
+    sm.add_argument("--limit", type=int, default=3, help="how many candidate menus to show")
+    sm.set_defaults(func=cmd_suggest_menu)
 
     f = sub.add_parser(
         "fetch",
