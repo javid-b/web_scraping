@@ -104,10 +104,11 @@ def scrape_shop(shop: ShopConfig, storage: Storage, scraped_at: str) -> ShopResu
                 if not next_url:
                     break
             elif pag.mode in ("query", "path"):
-                page += 1
                 next_url = category_url  # any non-None to continue the loop
             else:
                 break
+
+            page += 1
 
     return result
 
