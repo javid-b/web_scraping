@@ -4,6 +4,7 @@ lxml>=5.0
 PyYAML>=6.0
 rapidfuzz>=3.6
 tenacity>=8.2
+cloudscraper>=1.2.71
 
 # dev / test
 pytest>=8.0

@@ -51,7 +51,22 @@ class Fetcher:
     _last_request_at: float = 0.0
 
     def __post_init__(self) -> None:
-        self.session = requests.Session()
+        engine = (self.cfg.engine or "requests").lower()
+        if engine == "cloudscraper":
+            try:
+                import cloudscraper
+            except ImportError as exc:
+                raise FetchError(
+                    "engine: cloudscraper requires the 'cloudscraper' package; "
+                    "run `pip install cloudscraper`"
+                ) from exc
+            self.session = cloudscraper.create_scraper(
+                browser={"browser": "chrome", "platform": "windows", "mobile": False}
+            )
+        elif engine == "requests":
+            self.session = requests.Session()
+        else:
+            raise FetchError(f"unknown request.engine: {self.cfg.engine!r}")
         self.session.headers.update(_browser_headers(self.cfg.user_agent))
 
     def _sleep_if_needed(self) -> None:

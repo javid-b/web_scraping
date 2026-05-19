@@ -13,6 +13,7 @@ class RequestConfig:
     delay_seconds: float = 1.0
     timeout: int = 20
     max_retries: int = 3
+    engine: str = "requests"   # "requests" or "cloudscraper"
 
 
 @dataclass
@@ -81,6 +82,7 @@ def _merge_request(base: dict[str, Any], override: dict[str, Any] | None) -> Req
         delay_seconds=float(merged.get("delay_seconds", 1.0)),
         timeout=int(merged.get("timeout", 20)),
         max_retries=int(merged.get("max_retries", 3)),
+        engine=merged.get("engine", "requests"),
     )
 
 

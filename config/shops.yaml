@@ -186,6 +186,11 @@ defaults:
     delay_seconds: 1.0
     timeout: 20
     max_retries: 3
+    # AZ retailers commonly sit behind Cloudflare with TLS-fingerprint bot
+    # detection — plain python-requests gets 403. cloudscraper mimics Chrome's
+    # TLS handshake and handles basic JS challenges. Switch to "requests" per
+    # shop if the site doesn't need it.
+    engine: cloudscraper
   storage:
     db_path: data/prices.db
   merge:
