@@ -25,7 +25,7 @@ def _browser_headers(user_agent: str) -> dict[str, str]:
             "application/signed-exchange;v=b3;q=0.7"
         ),
         "Accept-Language": "en-US,en;q=0.9,az;q=0.8,ru;q=0.7",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
         "Cache-Control": "max-age=0",
@@ -102,6 +102,17 @@ class Fetcher:
 
         if resp.status_code >= 400:
             raise FetchError(f"HTTP {resp.status_code} for {url}")
+
+        # If the server insists on an encoding we can't decode (e.g. brotli
+        # without the `brotli` package, or zstd), `resp.text` silently returns
+        # compressed bytes interpreted as text. Surface that as a clear error.
+        enc = resp.headers.get("Content-Encoding", "").lower()
+        if enc in {"br", "zstd"}:
+            raise FetchError(
+                f"server returned Content-Encoding: {enc}, which python-requests "
+                f"can't decode by default. Install `brotli` (pip install brotli) "
+                f"or remove that codec from Accept-Encoding."
+            )
 
         resp.encoding = resp.apparent_encoding or resp.encoding
         return resp.text
