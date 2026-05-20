@@ -118,6 +118,58 @@ def test_find_menus_prefers_shared_anchor_class_selector():
     )
 
 
+def test_find_menus_prefers_shared_anchor_class_over_broad_ul():
+    """Kontakt's rendered page contains both a precise menu (~80 links sharing
+    a class) and a catch-all <ul> wrapping the whole page (hundreds of
+    unrelated links). The precise one must rank first even though the broad
+    one has more URLs."""
+    precise = "\n".join(
+        f'<div class="contentMenu__item"><a class="contentMenu__title" '
+        f'href="https://shop.az/c/cat{i}">Category {i}</a></div>'
+        for i in range(6)
+    )
+    noisy = "\n".join(
+        f'<li><a href="https://shop.az/random/{i}">Random {i}</a></li>'
+        for i in range(50)
+    )
+    html = f"""
+    <html><body>
+      <ul>
+        <li><div class="contentMenu">{precise}</div></li>
+        {noisy}
+      </ul>
+    </body></html>
+    """
+    suggestions = find_menus(html, "https://shop.az")
+    assert suggestions
+    top = suggestions[0]
+    assert top.selector == "a.contentMenu__title[href]"
+    assert len(top.urls) == 6
+
+
+def test_find_menus_drops_noisy_superset_of_accepted_candidate():
+    """A broader candidate whose URLs are a strict superset of an already-
+    accepted candidate should be filtered out as a noisier duplicate."""
+    html = """
+    <html><body>
+      <ul>
+        <li><div class="contentMenu">
+          <div class="contentMenu__item"><a class="contentMenu__title" href="/alpha">Alpha</a></div>
+          <div class="contentMenu__item"><a class="contentMenu__title" href="/beta">Beta</a></div>
+          <div class="contentMenu__item"><a class="contentMenu__title" href="/gamma">Gamma</a></div>
+          <div class="contentMenu__item"><a class="contentMenu__title" href="/delta">Delta</a></div>
+        </div></li>
+      </ul>
+    </body></html>
+    """
+    suggestions = find_menus(html, "https://shop.az")
+    assert len(suggestions) == 1, (
+        f"expected one cohesive suggestion, got {len(suggestions)}: "
+        f"{[s.selector for s in suggestions]}"
+    )
+    assert suggestions[0].selector == "a.contentMenu__title[href]"
+
+
 def test_find_menus_matches_camelcase_class():
     """`contentMenu` should match the menu-class heuristic even though the
     word 'menu' starts mid-string without a word boundary."""

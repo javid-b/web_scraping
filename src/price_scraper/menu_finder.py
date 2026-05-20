@@ -156,7 +156,8 @@ def find_menus(html: str, base_url: str, max_results: int = 3) -> list[MenuSugge
             representatives.setdefault(sig, anc)
 
     # 3. Score each group.
-    scored: list[tuple[float, Tag, list[Tag], list[str]]] = []
+    # Each entry is (score, has_shared_anchor_class, container, anchors, urls).
+    scored: list[tuple[float, bool, Tag, list[Tag], list[str]]] = []
     for sig, items in groups.items():
         anchors = [a for a, _ in items]
         urls = list(dict.fromkeys(url for _, url in items))
@@ -173,25 +174,32 @@ def find_menus(html: str, base_url: str, max_results: int = 3) -> list[MenuSugge
             score -= 5
         if container.find_parent(_FOOTER_TAGS):
             score -= 10
-        # Bonus when every anchor shares a class — that's a precise, cohesive menu.
-        if _common_anchor_class(anchors):
-            score += 5
+        # Big penalty for catch-all groups (likely whole-page <ul> wrappers).
+        if len(urls) > 200:
+            score -= 50
+        has_shared = _common_anchor_class(anchors) is not None
+        if has_shared:
+            score += 10
         # Bonus when URLs share a common path prefix (e.g. /category/X).
         prefixes = {urlparse(u).path.split("/", 2)[1] for u in urls if "/" in urlparse(u).path[1:]}
         if len(prefixes) == 1:
             score += 3
-        scored.append((score, container, anchors, urls))
+        scored.append((score, has_shared, container, anchors, urls))
 
-    scored.sort(key=lambda x: -x[0])
+    # Sort: shared-anchor-class candidates first (cohesive = real menu),
+    # then by descending score within each tier.
+    scored.sort(key=lambda x: (-int(x[1]), -x[0]))
 
     out: list[MenuSuggestion] = []
-    seen_url_sets: list[set[str]] = []
-    for score, container, anchors, urls in scored:
+    accepted_sets: list[set[str]] = []
+    for _score, _has_shared, container, anchors, urls in scored:
         url_set = set(urls)
-        # Skip if a higher-ranked candidate already covered these URLs.
-        if any(url_set <= existing for existing in seen_url_sets):
+        # Drop candidates that are a strict subset OR strict superset of one
+        # we've already accepted. The first wins (typically the most precise);
+        # broader 'wrapper' candidates and inner duplicates both get filtered.
+        if any(url_set <= existing or existing <= url_set for existing in accepted_sets):
             continue
-        seen_url_sets.append(url_set)
+        accepted_sets.append(url_set)
 
         classes = list(container.get("class") or [])
         note = f"<{container.name}>" + (f" .{classes[0]}" if classes else "")
