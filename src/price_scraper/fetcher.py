@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 from urllib.parse import urlsplit
 
 import requests
@@ -45,14 +46,34 @@ class FetchError(RuntimeError):
 
 @dataclass
 class Fetcher:
-    """Polite HTTP client with retries and a per-shop rate limit."""
+    """Polite HTTP client with retries and a per-shop rate limit.
+
+    Three engines:
+      * requests       - plain python-requests session
+      * cloudscraper   - mimics Chrome TLS fingerprint, defeats Cloudflare WAF
+      * playwright     - real headless Chromium, runs JavaScript before reading
+    """
 
     cfg: RequestConfig
     _last_request_at: float = 0.0
+    _engine: str = ""
+    _pw: Any = field(default=None, init=False, repr=False)
+    _pw_browser: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        engine = (self.cfg.engine or "requests").lower()
-        if engine == "cloudscraper":
+        self._engine = (self.cfg.engine or "requests").lower()
+        if self._engine == "playwright":
+            # Defer browser launch until first get(); fail fast on import.
+            try:
+                import playwright  # noqa: F401
+            except ImportError as exc:
+                raise FetchError(
+                    "engine: playwright requires the 'playwright' package. Run:\n"
+                    "    pip install playwright\n"
+                    "    playwright install chromium"
+                ) from exc
+            self.session = None  # type: ignore[assignment]
+        elif self._engine == "cloudscraper":
             try:
                 import cloudscraper
             except ImportError as exc:
@@ -63,19 +84,68 @@ class Fetcher:
             self.session = cloudscraper.create_scraper(
                 browser={"browser": "chrome", "platform": "windows", "mobile": False}
             )
-        elif engine == "requests":
+            self.session.headers.update(_browser_headers(self.cfg.user_agent))
+        elif self._engine == "requests":
             self.session = requests.Session()
+            self.session.headers.update(_browser_headers(self.cfg.user_agent))
         else:
             raise FetchError(f"unknown request.engine: {self.cfg.engine!r}")
-        self.session.headers.update(_browser_headers(self.cfg.user_agent))
 
     def _sleep_if_needed(self) -> None:
         elapsed = time.monotonic() - self._last_request_at
         if elapsed < self.cfg.delay_seconds:
             time.sleep(self.cfg.delay_seconds - elapsed)
 
+    def _ensure_playwright(self) -> None:
+        if self._pw_browser is not None:
+            return
+        from playwright.sync_api import sync_playwright
+
+        self._pw = sync_playwright().start()
+        self._pw_browser = self._pw.chromium.launch(headless=True)
+        log.info("started Playwright browser (chromium, headless)")
+
+    def close(self) -> None:
+        """Release the headless browser process. Idempotent."""
+        if self._pw_browser is not None:
+            try:
+                self._pw_browser.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self._pw_browser = None
+        if self._pw is not None:
+            try:
+                self._pw.stop()
+            except Exception:  # noqa: BLE001
+                pass
+            self._pw = None
+
+    def __del__(self) -> None:
+        self.close()
+
+    def _get_playwright(self, url: str) -> str:
+        self._ensure_playwright()
+        ctx = self._pw_browser.new_context(
+            user_agent=self.cfg.user_agent,
+            extra_http_headers={
+                k: v for k, v in _browser_headers(self.cfg.user_agent).items()
+                if k.lower() not in {"user-agent", "accept-encoding"}
+            },
+        )
+        page = ctx.new_page()
+        try:
+            page.goto(url, wait_until="networkidle", timeout=self.cfg.timeout * 1000)
+            return page.content()
+        finally:
+            page.close()
+            ctx.close()
+            self._last_request_at = time.monotonic()
+
     def get(self, url: str) -> str:
         self._sleep_if_needed()
+
+        if self._engine == "playwright":
+            return self._get_playwright(url)
 
         # Some sites refuse if Referer is missing on a deep page hit.
         parts = urlsplit(url)

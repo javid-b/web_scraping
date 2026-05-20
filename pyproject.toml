@@ -19,6 +19,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# JS-rendered sites need a real browser; install with:
+#   pip install -e ".[playwright]" && playwright install chromium
+playwright = ["playwright>=1.40"]
 
 [project.scripts]
 price_scraper = "price_scraper.__main__:main"
