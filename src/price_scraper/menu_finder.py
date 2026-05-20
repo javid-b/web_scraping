@@ -71,6 +71,27 @@ def _is_plausible_category_url(url: str, base_netloc: str) -> bool:
     return True
 
 
+def _filter_to_leaves(urls: list[str]) -> list[str]:
+    """Drop URLs that are a strict parent path of another URL in the list.
+
+    e.g. given:
+      /a/b
+      /a/b/c
+      /a/b/c/d
+    returns just /a/b/c/d — only the deepest leaf. Useful for menus that list
+    a category alongside its subcategories: scraping the parent would re-fetch
+    products already covered by the children.
+    """
+    norms = {u.rstrip("/") for u in urls}
+    out: list[str] = []
+    for u in urls:
+        prefix = u.rstrip("/") + "/"
+        if any(other.startswith(prefix) for other in norms if other != u.rstrip("/")):
+            continue
+        out.append(u)
+    return out
+
+
 def _common_anchor_class(anchors: list[Tag]) -> str | None:
     """If every anchor in the group shares a class, return the longest one.
 
@@ -119,7 +140,9 @@ def _menu_ancestors(a: Tag, max_levels: int = 8) -> list[Tag]:
     return out
 
 
-def find_menus(html: str, base_url: str, max_results: int = 3) -> list[MenuSuggestion]:
+def find_menus(
+    html: str, base_url: str, max_results: int = 3, leaf_only: bool = True
+) -> list[MenuSuggestion]:
     soup = BeautifulSoup(html, "lxml")
     base_netloc = urlparse(base_url).netloc
 
@@ -161,6 +184,8 @@ def find_menus(html: str, base_url: str, max_results: int = 3) -> list[MenuSugge
     for sig, items in groups.items():
         anchors = [a for a, _ in items]
         urls = list(dict.fromkeys(url for _, url in items))
+        if leaf_only:
+            urls = _filter_to_leaves(urls)
         if len(urls) < 3:
             continue
         container = representatives[sig]

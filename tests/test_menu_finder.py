@@ -170,6 +170,35 @@ def test_find_menus_drops_noisy_superset_of_accepted_candidate():
     assert suggestions[0].selector == "a.contentMenu__title[href]"
 
 
+def test_filter_to_leaves_drops_parent_paths():
+    from price_scraper.menu_finder import _filter_to_leaves
+
+    urls = [
+        "https://shop.az/agilli-ev/smart-avadanliqlar",
+        "https://shop.az/agilli-ev/smart-avadanliqlar/sensorlar",
+        "https://shop.az/agilli-ev/smart-avadanliqlar/isiqlandirma",
+        "https://shop.az/telefoniya/smartfonlar",   # no children → kept
+        "https://shop.az/telefoniya",
+        "https://shop.az/telefoniya/aksesuarlar",
+    ]
+    leaves = _filter_to_leaves(urls)
+    assert "https://shop.az/agilli-ev/smart-avadanliqlar" not in leaves   # has children
+    assert "https://shop.az/telefoniya" not in leaves                    # has children
+    assert "https://shop.az/agilli-ev/smart-avadanliqlar/sensorlar" in leaves
+    assert "https://shop.az/agilli-ev/smart-avadanliqlar/isiqlandirma" in leaves
+    assert "https://shop.az/telefoniya/smartfonlar" in leaves
+    assert "https://shop.az/telefoniya/aksesuarlar" in leaves
+
+
+def test_filter_to_leaves_does_not_drop_sibling_with_same_prefix():
+    """`/cat/foo` is NOT a parent of `/cat/foobar` — only the slash-separated
+    boundary counts."""
+    from price_scraper.menu_finder import _filter_to_leaves
+
+    urls = ["https://x.az/cat/foo", "https://x.az/cat/foobar"]
+    assert set(_filter_to_leaves(urls)) == set(urls)
+
+
 def test_find_menus_matches_camelcase_class():
     """`contentMenu` should match the menu-class heuristic even though the
     word 'menu' starts mid-string without a word boundary."""

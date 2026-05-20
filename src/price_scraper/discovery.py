@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup, Tag
 
 from .config import DiscoveryConfig, ShopConfig
 from .fetcher import Fetcher
+from .menu_finder import _filter_to_leaves
 
 log = logging.getLogger(__name__)
 
@@ -88,4 +89,10 @@ def discover_categories(shop: ShopConfig, fetcher: Fetcher) -> list[str]:
     else:
         raise ValueError(f"{shop.id}: unknown discovery mode {d.mode!r}")
 
-    return _apply_filters(urls, d.include, d.exclude)
+    urls = _apply_filters(urls, d.include, d.exclude)
+    if d.leaf_only and d.mode != "static":
+        # Menus often list a parent category alongside its children; scraping
+        # the parent would re-fetch the children's products. Drop parents.
+        # Static mode is left alone because the user wrote the list explicitly.
+        urls = _filter_to_leaves(urls)
+    return urls

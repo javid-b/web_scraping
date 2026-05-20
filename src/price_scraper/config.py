@@ -44,6 +44,7 @@ class DiscoveryConfig:
     menu_selector: str | None = None
     include: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
+    leaf_only: bool = True   # drop parent-path URLs when a child path is present
 
 
 @dataclass
@@ -119,6 +120,7 @@ def _discovery(raw: dict[str, Any] | None) -> DiscoveryConfig:
         menu_selector=raw.get("menu_selector"),
         include=list(raw.get("include") or []),
         exclude=list(raw.get("exclude") or []),
+        leaf_only=bool(raw.get("leaf_only", True)),
     )
 
 
