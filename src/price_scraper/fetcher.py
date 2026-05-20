@@ -40,6 +40,31 @@ def _browser_headers(user_agent: str) -> dict[str, str]:
     }
 
 
+# Domains and resource types we never need for scraping — blocking them speeds
+# the page up dramatically and stops `networkidle` from waiting forever on
+# constantly-polling analytics widgets.
+_BLOCK_HOSTS = (
+    "google-analytics", "googletagmanager", "googletagservices", "googleadservices",
+    "doubleclick", "googlesyndication", "facebook.net", "facebook.com/tr",
+    "hotjar", "clarity.ms", "yandex.ru/metrika", "mc.yandex", "metrika",
+    "tiktok.com/i18n", "criteo", "snapchat", "twitter.com/i", "x.com/i",
+    "intercom", "tawk.to", "livechat", "zendesk", "crisp.chat",
+)
+_BLOCK_TYPES = {"image", "media", "font"}
+
+
+def _maybe_block_route(route, request) -> None:  # type: ignore[no-untyped-def]
+    url = request.url
+    rtype = request.resource_type
+    if rtype in _BLOCK_TYPES:
+        route.abort()
+        return
+    if any(host in url for host in _BLOCK_HOSTS):
+        route.abort()
+        return
+    route.continue_()
+
+
 class FetchError(RuntimeError):
     pass
 
@@ -63,7 +88,6 @@ class Fetcher:
     def __post_init__(self) -> None:
         self._engine = (self.cfg.engine or "requests").lower()
         if self._engine == "playwright":
-            # Defer browser launch until first get(); fail fast on import.
             try:
                 import playwright  # noqa: F401
             except ImportError as exc:
@@ -125,7 +149,6 @@ class Fetcher:
 
     def _get_playwright(self, url: str) -> str:
         self._ensure_playwright()
-        # Lazy import so plain-requests users don't pay the cost.
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
         ctx = self._pw_browser.new_context(
@@ -137,8 +160,6 @@ class Fetcher:
         )
         page = ctx.new_page()
         try:
-            # Block ad / analytics / chat widget traffic so the page settles
-            # faster and 'networkidle' actually fires.
             page.route("**/*", _maybe_block_route)
             try:
                 page.goto(url, wait_until="load", timeout=self.cfg.timeout * 1000)
@@ -147,7 +168,6 @@ class Fetcher:
                     "Playwright goto timeout for %s; proceeding with partial DOM",
                     url,
                 )
-            # Brief grace period for late-rendered JS; not fatal if it doesn't settle.
             try:
                 page.wait_for_load_state("networkidle", timeout=3000)
             except PlaywrightTimeoutError:
@@ -157,31 +177,6 @@ class Fetcher:
             page.close()
             ctx.close()
             self._last_request_at = time.monotonic()
-
-
-# Domains and resource types we never need for scraping — blocking them speeds
-# the page up dramatically and stops `networkidle` from waiting forever on
-# constantly-polling analytics widgets.
-_BLOCK_HOSTS = (
-    "google-analytics", "googletagmanager", "googletagservices", "googleadservices",
-    "doubleclick", "googlesyndication", "facebook.net", "facebook.com/tr",
-    "hotjar", "clarity.ms", "yandex.ru/metrika", "mc.yandex", "metrika",
-    "tiktok.com/i18n", "criteo", "snapchat", "twitter.com/i", "x.com/i",
-    "intercom", "tawk.to", "livechat", "zendesk", "crisp.chat",
-)
-_BLOCK_TYPES = {"image", "media", "font"}
-
-
-def _maybe_block_route(route, request) -> None:  # type: ignore[no-untyped-def]
-    url = request.url
-    rtype = request.resource_type
-    if rtype in _BLOCK_TYPES:
-        route.abort()
-        return
-    if any(host in url for host in _BLOCK_HOSTS):
-        route.abort()
-        return
-    route.continue_()
 
     def get(self, url: str) -> str:
         self._sleep_if_needed()
