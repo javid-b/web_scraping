@@ -20,3 +20,6 @@ dist/
 
 .idea/
 .vscode/
+
+# Generated documentation outputs — re-render with `python docs/render_pdf.py`.
+docs/*.pdf

@@ -22,6 +22,10 @@ dev = ["pytest>=8.0"]
 # JS-rendered sites need a real browser; install with:
 #   pip install -e ".[playwright]" && playwright install chromium
 playwright = ["playwright>=1.40"]
+# Regenerate docs/SETUP_GUIDE.pdf from the markdown source:
+#   pip install -e ".[docs]"
+#   python docs/render_pdf.py
+docs = ["weasyprint>=60", "markdown2>=2.5"]
 
 [project.scripts]
 price_scraper = "price_scraper.__main__:main"
