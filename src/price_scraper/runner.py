@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
 from .config import AppConfig, ShopConfig
@@ -42,20 +42,55 @@ def scrape_shop(shop: ShopConfig, storage: Storage, scraped_at: str) -> ShopResu
         log.info("shop %s disabled, skipping", shop.id)
         return result
 
-    fetcher = Fetcher(shop.request)
+    # Phase 1: discovery. May use a heavier engine (e.g. Playwright for a
+    # JS-rendered menu) than the bulk listing scrape.
+    disc_engine = shop.discovery.engine or shop.request.engine
+    if disc_engine != shop.request.engine:
+        disc_fetcher = Fetcher(replace(shop.request, engine=disc_engine))
+        log.info("[%s] discovery uses engine=%s (override of %s)",
+                 shop.id, disc_engine, shop.request.engine)
+        owns_disc = True
+    else:
+        disc_fetcher = Fetcher(shop.request)
+        owns_disc = False
 
     try:
-        categories = discover_categories(shop, fetcher)
+        categories = discover_categories(shop, disc_fetcher)
     except (FetchError, ValueError) as exc:
         msg = f"discovery failed: {exc}"
         log.error("[%s] %s", shop.id, msg)
         result.errors.append(msg)
+        if owns_disc:
+            disc_fetcher.close()
         return result
+    finally:
+        if owns_disc:
+            # Free the heavy browser before opening the fast fetcher.
+            disc_fetcher.close()
 
     if not categories:
         log.warning("[%s] no category URLs configured", shop.id)
         return result
 
+    log.info("[%s] discovered %d category URL(s)", shop.id, len(categories))
+
+    # Phase 2: bulk listing scrape with the shop's main engine.
+    fetcher = Fetcher(shop.request) if owns_disc else disc_fetcher
+
+    try:
+        return _scrape_categories(shop, fetcher, categories, storage, scraped_at, result)
+    finally:
+        fetcher.close()
+
+
+def _scrape_categories(
+    shop: ShopConfig,
+    fetcher: Fetcher,
+    categories: list[str],
+    storage: Storage,
+    scraped_at: str,
+    result: ShopResult,
+) -> ShopResult:
     pag = shop.listing.pagination
 
     for category_url in categories:

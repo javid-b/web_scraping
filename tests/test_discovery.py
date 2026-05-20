@@ -72,3 +72,37 @@ def test_static_discovery_never_filters_leaves():
     ))
     urls = discover_categories(shop, _StubFetcher(""))
     assert urls == ["https://shop.az/cat", "https://shop.az/cat/sub-a"]
+
+
+def test_discovery_engine_override_is_parsed():
+    """`discovery.engine` in YAML should land on DiscoveryConfig.engine, so the
+    runner can spin up a Playwright fetcher just for the menu fetch and reuse
+    a cloudscraper fetcher for the bulk listings."""
+    import yaml
+    from price_scraper.config import load_config
+    from pathlib import Path
+
+    cfg_text = """
+shops:
+  - id: kontakt
+    name: Kontakt
+    base_url: https://kontakt.az
+    request:
+      engine: cloudscraper
+    discovery:
+      mode: menu
+      menu_selector: "a.contentMenu__title[href]"
+      engine: playwright
+    listing:
+      product_selector: ".prodItem"
+defaults:
+  request:
+    user_agent: "x"
+    engine: requests
+"""
+    tmp = Path("/tmp/_test_cfg.yaml")
+    tmp.write_text(cfg_text)
+    cfg = load_config(tmp)
+    s = cfg.shops[0]
+    assert s.request.engine == "cloudscraper"
+    assert s.discovery.engine == "playwright"

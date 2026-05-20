@@ -27,6 +27,11 @@
 #     include:       [regex patterns] URL must match at least one (sitemap/menu mode)
 #     exclude:       [regex patterns] URLs matching any are dropped
 #     menu_selector: CSS selector for nav <a> tags (mode=menu)
+#     engine:        override request.engine just for the discovery fetch
+#                    (e.g. "playwright" for a JS-rendered menu while keeping
+#                    "cloudscraper" for the bulk category scrapes — one slow
+#                    browser call, then hundreds of fast HTTP calls)
+#     leaf_only:     drop parent-path URLs when a child path is present (default true)
 #   listing:
 #     product_selector:   CSS selector for one product card
 #     name_selector:      relative selector inside the card (defaults: card text)
