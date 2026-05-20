@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 from dataclasses import dataclass, replace
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
@@ -92,6 +93,10 @@ def _scrape_categories(
     result: ShopResult,
 ) -> ShopResult:
     pag = shop.listing.pagination
+    # Shuffle so the daily access pattern doesn't always start with the same
+    # category — looks less like an automated crawl from server-side logs.
+    categories = list(categories)
+    random.shuffle(categories)
 
     for category_url in categories:
         result.categories_visited += 1

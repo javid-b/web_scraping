@@ -251,6 +251,84 @@ cloudscraper, ~0.5 s per page. With Playwright, ~3 s per page. A shop with
 
 ---
 
+## Staying polite (avoid getting blocked over time)
+
+A daily scraper that hits a shop with a perfectly steady 1 second cadence
+for 30 days will eventually trigger automated rate-limiting or WAF rules,
+even if no single request looks suspicious. The shipped defaults in
+`shops.yaml` are tuned to look more like organic browsing.
+
+### Shipped defaults (`defaults.request`)
+
+| Setting | Value | What it does |
+|---|---|---|
+| `delay_seconds` | 3.0 | Minimum pause between requests |
+| `delay_jitter` | 4.0 | Random 0–4 s added on top, so actual cadence is 3–7 s |
+| `long_pause_every` | 40 | Every 40 requests, take a longer break |
+| `long_pause_seconds` | 30 | Base length of that break |
+| `long_pause_jitter` | 60 | Random 0–60 s added, so break is 30–90 s |
+| `timeout` | 30 | Per-request HTTP timeout |
+| `user_agent` | Chrome on Windows | Realistic UA; matches the sec-ch-ua client hints we send |
+
+### What also happens automatically each run
+
+- **Category order is shuffled.** The scraper doesn't always start with the
+  same category — server-side logs see a different access pattern each day.
+- **Per-page Referer header** is set to the shop's origin, so deep links
+  look like they were clicked from the homepage, not arrived at out of the
+  blue.
+- **Cycle detection** stops the scraper if pagination ever points back to a
+  page already fetched in the same session (avoids accidental hammering).
+
+### What still gets you flagged eventually
+
+- **Scraping the same shop from a static cloud / VPS IP** with a non-residential
+  ASN. WAFs increasingly cross-check ASN with traffic patterns. Run from a
+  home connection if possible.
+- **All seven shops scraping at once from the same IP.** Stagger them with
+  cron, e.g.:
+
+    ```
+    30 06 * * *  price_scraper scrape --shop kontakt
+    30 07 * * *  price_scraper scrape --shop irshad
+    30 08 * * *  price_scraper scrape --shop bakuelectronics
+    ...
+    ```
+
+- **Scraping 365 days a year.** Real people miss days. Skipping
+  one weekend day a week is harmless for trend tracking and reduces
+  the signature.
+- **Never visiting product detail pages.** A real shopper opens product
+  pages occasionally; a price-only scraper only hits listings. Mostly a
+  theoretical concern — none of the AZ retailers are sophisticated enough
+  to use this signal today.
+
+### Per-shop overrides
+
+If one shop tightens its anti-bot rules and starts returning 403s, slow
+that one down without affecting the others:
+
+```yaml
+- id: irshad
+  request:
+    delay_seconds: 8
+    delay_jitter: 10
+    long_pause_every: 20
+```
+
+### What this scraper does NOT do (intentional)
+
+- No CAPTCHA-solving services.
+- No proxy / IP rotation.
+- No fake-account creation.
+- No deceptive cookies or behavioural-fingerprint spoofing beyond what
+  cloudscraper does for the TLS handshake.
+
+These are the lines between "polite scraping for personal price-comparison
+use" and "actively evading site-owners' explicit defences."
+
+---
+
 ## When you get stuck
 
 Paste back to me:

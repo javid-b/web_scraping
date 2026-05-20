@@ -14,9 +14,13 @@
 #   base_url:        root URL, used to resolve relative links
 #   enabled:         set to false to skip without deleting the entry
 #   request:
-#     user_agent:    override the default UA
-#     delay_seconds: politeness delay between requests to this shop
-#     timeout:       request timeout in seconds
+#     user_agent:        override the default UA
+#     delay_seconds:     base delay between requests (politeness floor)
+#     delay_jitter:      random 0..delay_jitter added on top each request,
+#                        so request cadence doesn't look robotic
+#     long_pause_every:  every N requests, take an extra long break (0 = off)
+#     long_pause_seconds, long_pause_jitter: length of that break (random)
+#     timeout:           request timeout in seconds
 #   discovery:
 #     mode:          how to find category URLs. One of:
 #                      static    - use category_urls list as-is
@@ -181,8 +185,16 @@ shops:
 defaults:
   request:
     user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    delay_seconds: 1.0
-    timeout: 20
+    # Politeness: random 3-7 s between requests instead of a robotic fixed
+    # cadence, plus a 30-90 s "session pause" every 40 requests to simulate
+    # a human stepping away. Slower per shop, but daily scrapes are far less
+    # likely to trigger automated rate-limiting / WAF rules.
+    delay_seconds: 3.0
+    delay_jitter: 4.0
+    long_pause_every: 40
+    long_pause_seconds: 30.0
+    long_pause_jitter: 60.0
+    timeout: 30
     max_retries: 3
     # AZ retailers commonly sit behind Cloudflare with TLS-fingerprint bot
     # detection — plain python-requests gets 403. cloudscraper mimics Chrome's

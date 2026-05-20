@@ -10,10 +10,20 @@ import yaml
 @dataclass
 class RequestConfig:
     user_agent: str = "Mozilla/5.0"
+    # Base delay between requests; per-request actual delay is
+    #   delay_seconds + uniform(0, delay_jitter)
+    # so a request rate looks human (a robot at exactly 1.0 s cadence is a
+    # giveaway). Set jitter > base for natural variability.
     delay_seconds: float = 1.0
+    delay_jitter: float = 0.0
     timeout: int = 20
     max_retries: int = 3
-    engine: str = "requests"   # "requests" or "cloudscraper"
+    engine: str = "requests"   # "requests" / "cloudscraper" / "playwright"
+    # Optional: every N requests, sleep an extra long_pause_seconds (+ uniform
+    # 0..long_pause_jitter) to simulate a human stepping away. 0 disables.
+    long_pause_every: int = 0
+    long_pause_seconds: float = 30.0
+    long_pause_jitter: float = 30.0
 
 
 @dataclass
@@ -84,9 +94,13 @@ def _merge_request(base: dict[str, Any], override: dict[str, Any] | None) -> Req
     return RequestConfig(
         user_agent=merged.get("user_agent", "Mozilla/5.0"),
         delay_seconds=float(merged.get("delay_seconds", 1.0)),
+        delay_jitter=float(merged.get("delay_jitter", 0.0)),
         timeout=int(merged.get("timeout", 20)),
         max_retries=int(merged.get("max_retries", 3)),
         engine=merged.get("engine", "requests"),
+        long_pause_every=int(merged.get("long_pause_every", 0)),
+        long_pause_seconds=float(merged.get("long_pause_seconds", 30.0)),
+        long_pause_jitter=float(merged.get("long_pause_jitter", 30.0)),
     )
 
 

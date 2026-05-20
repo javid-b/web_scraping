@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -81,6 +82,7 @@ class Fetcher:
 
     cfg: RequestConfig
     _last_request_at: float = 0.0
+    _request_count: int = 0
     _engine: str = ""
     _pw: Any = field(default=None, init=False, repr=False)
     _pw_browser: Any = field(default=None, init=False, repr=False)
@@ -116,9 +118,24 @@ class Fetcher:
             raise FetchError(f"unknown request.engine: {self.cfg.engine!r}")
 
     def _sleep_if_needed(self) -> None:
+        # Randomised per-request delay so the cadence isn't robotic.
+        base = self.cfg.delay_seconds + random.uniform(0, max(0.0, self.cfg.delay_jitter))
         elapsed = time.monotonic() - self._last_request_at
-        if elapsed < self.cfg.delay_seconds:
-            time.sleep(self.cfg.delay_seconds - elapsed)
+        if elapsed < base:
+            time.sleep(base - elapsed)
+
+        # Periodic long pause to mimic a human stepping away.
+        self._request_count += 1
+        every = self.cfg.long_pause_every
+        if every > 0 and self._request_count % every == 0:
+            pause = self.cfg.long_pause_seconds + random.uniform(
+                0, max(0.0, self.cfg.long_pause_jitter)
+            )
+            log.info(
+                "session pause: sleeping %.1f s after %d requests",
+                pause, self._request_count,
+            )
+            time.sleep(pause)
 
     def _ensure_playwright(self) -> None:
         if self._pw_browser is not None:
