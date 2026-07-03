@@ -1,0 +1,15 @@
+{
+  "bricks": [
+    {"name": "Brick 1x1", "l": 1, "w": 1, "h": 1},
+    {"name": "Brick 1x2", "l": 1, "w": 2, "h": 1},
+    {"name": "Brick 1x3", "l": 1, "w": 3, "h": 1},
+    {"name": "Brick 1x4", "l": 1, "w": 4, "h": 1},
+    {"name": "Brick 1x6", "l": 1, "w": 6, "h": 1},
+    {"name": "Brick 1x8", "l": 1, "w": 8, "h": 1},
+    {"name": "Brick 2x2", "l": 2, "w": 2, "h": 1},
+    {"name": "Brick 2x3", "l": 2, "w": 3, "h": 1},
+    {"name": "Brick 2x4", "l": 2, "w": 4, "h": 1},
+    {"name": "Brick 2x6", "l": 2, "w": 6, "h": 1},
+    {"name": "Brick 2x8", "l": 2, "w": 8, "h": 1}
+  ]
+}
